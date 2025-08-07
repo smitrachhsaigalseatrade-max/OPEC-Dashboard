@@ -100,7 +100,12 @@ def export_all_countries_pdf(data_dict, title_prefix="OPEC & OPEC+ Crude Oil Pro
         row, col = divmod(idx, n_cols)
         ax = axs[row][col] if n_rows > 1 else axs[col]
 
-        dates = pd.to_datetime(df['period'])
+        # ✅ Fix: ensure data is sorted by date before plotting
+        df = df.copy()
+        df['period'] = pd.to_datetime(df['period'])
+        df = df.sort_values('period')
+
+        dates = df['period']
         values = df['value']
 
         ax.plot(dates, values, label=country, color='blue')
@@ -127,6 +132,7 @@ def export_all_countries_pdf(data_dict, title_prefix="OPEC & OPEC+ Crude Oil Pro
         pdf.savefig(fig, bbox_inches="tight")
     plt.close(fig)
     return filename
+
     
 # --- Streamlit UI ---
 st.set_page_config(layout="wide")
@@ -171,3 +177,4 @@ if st.button("📄 Download PDF Report"):
                 file_name="OPEC_Production_Report.pdf",
                 mime="application/pdf"
             )
+
