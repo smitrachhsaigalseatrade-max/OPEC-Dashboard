@@ -64,7 +64,7 @@ def plotly_production_chart(df, country):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['period'], y=df['value'], mode='lines+markers', name=country))
     fig.update_layout(title=f"{country} Crude Oil Production",
-                      xaxis_title="Period", yaxis_title="Production (kb/d)", height=300)
+                      xaxis_title="Period", yaxis_title="Production (mb/d)", height=300)
     return fig
 
 # --- Analysis (YoY Change) ---
@@ -177,6 +177,7 @@ if st.button("📄 Download PDF Report"):
                 file_name="OPEC_Production_Report.pdf",
                 mime="application/pdf"
             )
+
 
 
 
