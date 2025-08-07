@@ -72,25 +72,22 @@ def generate_analysis(df):
         return "No data available for analysis."
 
     df = df.sort_values("period")
-    
-    # Get the last row (full row, not a single value)
+
     latest_row = df.iloc[-1]
     latest_period = latest_row["period"]
-    latest_value = latest_row["value"]
+    latest_value = float(latest_row["value"])  # ensure float
 
-    # Find row with same month 1 year ago
     year_ago_date = latest_period - pd.DateOffset(years=1)
     year_ago_row = df[df["period"] == year_ago_date]
 
     if year_ago_row.empty:
         return "Insufficient historical data for YoY comparison."
 
-    year_ago_value = year_ago_row.iloc[0]["value"]
+    year_ago_value = float(year_ago_row.iloc[0]["value"])  # ensure float
     change = latest_value - year_ago_value
     pct_change = (change / year_ago_value) * 100
 
     return f"{latest_period.strftime('%b %Y')}: {latest_value:.2f} mb/d ({pct_change:+.1f}% YoY)"
-
 
 # --- Export to PDF using Matplotlib ---
 def export_all_countries_pdf(data_dict, title_prefix="OPEC+ Crude Oil Production", filename="opec_production_report.pdf"):
@@ -135,5 +132,6 @@ if st.button("📄 Download PDF Report"):
                 file_name="OPEC_Production_Report.pdf",
                 mime="application/pdf"
             )
+
 
 
