@@ -68,15 +68,21 @@ def plotly_production_chart(df, country):
 
 # --- Analysis (YoY Change) ---
 def generate_analysis(df):
-    if len(df) < 13:
-        return "Not enough data for analysis."
-    latest = df.iloc[-1]
-    year_ago = df[df["period"] == latest["period"] - pd.DateOffset(years=1)]
-    if not year_ago.empty:
-        change = latest["value"] - year_ago.iloc[0]["value"]
-        pct_change = (change / year_ago.iloc[0]["value"]) * 100
-        return f"YoY Change: {change:.0f} kb/d ({pct_change:.1f}%)"
-    return "YoY comparison unavailable."
+    if df.empty:
+        return "No data available for analysis."
+
+    df = df.sort_values("period")
+    latest_row = df.iloc[-1]
+    year_ago = df[df["period"] == latest_row["period"] - pd.DateOffset(years=1)]
+
+    if year_ago.empty:
+        return "Insufficient historical data for comparison."
+
+    change = latest_row["value"] - year_ago.iloc[0]["value"]
+    pct_change = (change / year_ago.iloc[0]["value"]) * 100
+
+    return f"{latest_row['period'].strftime('%b %Y')}: {latest_row['value']:.2f} mb/d ({pct_change:+.1f}% YoY)"
+
 
 # --- Export to PDF using Matplotlib ---
 def export_all_countries_pdf(data_dict, title_prefix="OPEC+ Crude Oil Production", filename="opec_production_report.pdf"):
@@ -121,3 +127,4 @@ if st.button("📄 Download PDF Report"):
                 file_name="OPEC_Production_Report.pdf",
                 mime="application/pdf"
             )
+
