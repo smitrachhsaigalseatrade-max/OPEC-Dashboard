@@ -64,7 +64,7 @@ def plotly_production_chart(df, country):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['period'], y=df['value'], mode='lines+markers', name=country))
     fig.update_layout(title=f"{country} Crude Oil Production",
-                      xaxis_title="Period", yaxis_title="Production (kb/d)", height=400)
+                      xaxis_title="Period", yaxis_title="Production (kb/d)", height=300)
     return fig
 
 # --- Analysis (YoY Change) ---
@@ -73,10 +73,9 @@ def generate_analysis(df):
         return "No data available for analysis."
 
     df = df.sort_values("period")
-
     latest_row = df.iloc[-1]
     latest_period = latest_row["period"]
-    latest_value = float(latest_row["value"])  # ensure float
+    latest_value = float(latest_row["value"])
 
     year_ago_date = latest_period - pd.DateOffset(years=1)
     year_ago_row = df[df["period"] == year_ago_date]
@@ -84,7 +83,7 @@ def generate_analysis(df):
     if year_ago_row.empty:
         return "Insufficient historical data for YoY comparison."
 
-    year_ago_value = float(year_ago_row.iloc[0]["value"])  # ensure float
+    year_ago_value = float(year_ago_row.iloc[0]["value"])
     change = latest_value - year_ago_value
     pct_change = (change / year_ago_value) * 100
 
@@ -99,8 +98,8 @@ def export_all_countries_pdf(data_dict, title_prefix="OPEC & OPEC+ Crude Oil Pro
             ax.set_title(f"{title_prefix}: {country}")
             ax.set_xlabel("Date")
             ax.set_ylabel("Production (mb/d)")
-            ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f'{x:,.1f}'))  # Clean y-axis
-            ax.yaxis.set_major_locator(plt.MaxNLocator(nbins=5))  # Fewer y-ticks
+            ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f'{x:,.1f}'))
+            ax.yaxis.set_major_locator(plt.MaxNLocator(nbins=5))
             ax.grid(True)
             ax.legend()
             fig.tight_layout()
@@ -109,20 +108,36 @@ def export_all_countries_pdf(data_dict, title_prefix="OPEC & OPEC+ Crude Oil Pro
     return filename
 
 # --- Streamlit UI ---
+st.set_page_config(layout="wide")
 st.title("OPEC & OPEC+ Crude Oil Production Dashboard")
 
 selected_countries = st.multiselect("Select countries/regions to display", options=list(SERIES_IDS.values()), default=list(SERIES_IDS.values()))
 data_dict = {}
 
+cols_per_row = 3
+
+country_names = []
+country_dfs = []
+
 for name in selected_countries:
-    # Reverse lookup the series_id
     series_id = [k for k, v in SERIES_IDS.items() if v == name][0]
     with st.spinner(f"Fetching data for {name}..."):
         df = fetch_series_data(series_id)
         if not df.empty:
             data_dict[name] = df
-            st.plotly_chart(plotly_production_chart(df, name), use_container_width=True)
-            st.caption(generate_analysis(df))
+            country_names.append(name)
+            country_dfs.append(df)
+
+# Render plots in grid layout
+for i in range(0, len(country_names), cols_per_row):
+    cols = st.columns(cols_per_row)
+    for j in range(cols_per_row):
+        if i + j < len(country_names):
+            name = country_names[i + j]
+            df = country_dfs[i + j]
+            with cols[j]:
+                st.plotly_chart(plotly_production_chart(df, name), use_container_width=True)
+                st.caption(generate_analysis(df))
 
 # --- PDF Export ---
 if st.button("📄 Download PDF Report"):
