@@ -5,24 +5,35 @@ import plotly.graph_objects as go
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
-import pandas as pd
+
 # --- Constants ---
 API_URL = "https://api.eia.gov/v2/steo/data/"
 API_KEY = "hEu3sZUgechYgqPGXrhLG8cOpMhLvxQwC2PPLhcl"
 
 # --- Series IDs ---
 SERIES_IDS = {
-    "OPEC": "COPR_OPEC",
-    "OPEC+": "COPR_OPECPLUS",
-    "Saudi Arabia": "COPR_SAUDI",
-    "Russia": "COPR_RUSSIA",
-    "UAE": "COPR_UAE",
-    "Iraq": "COPR_IRAQ",
-    "Iran": "COPR_IRAN",
-    "Kuwait": "COPR_KUWAIT",
-    "Venezuela": "COPR_VENEZUELA"
+    'COPR_AG': 'Algeria',
+    'COPR_CF': 'Congo',
+    'COPR_EK': 'Equatorial Guinea',
+    'COPR_GB': 'Gabon',
+    'COPR_IR': 'Iran',
+    'COPR_IZ': 'Iraq',
+    'COPR_KU': 'Kuwait',
+    'COPR_LY': 'Libya',
+    'COPR_NI': 'Nigeria',
+    'COPR_SA': 'Saudi Arabia',
+    'COPR_TC': 'UAE',
+    'COPR_VE': 'Venezuela',
+    'COPR_AJ': 'Azerbaijan',
+    'COPR_BA': 'Bahrain',
+    'COPR_BX': 'Brunei',
+    'COPR_KZ': 'Kazakhstan',
+    'COPR_MY': 'Malaysia',
+    'COPR_MX': 'Mexico',
+    'COPR_MU': 'Oman',
+    'COPR_RS': 'Russia',
+    'COPR_SU': 'Sudan',
+    'COPR_OD': 'South Sudan'
 }
 
 # --- Fetch and Process Data ---
@@ -72,7 +83,7 @@ def export_all_countries_pdf(data_dict, title_prefix="OPEC+ Crude Oil Production
     with PdfPages(filename) as pdf:
         for country, df in data_dict.items():
             fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(pd.to_datetime(df['date']), df['value'], label=country, color='blue')
+            ax.plot(pd.to_datetime(df['period']), df['value'], label=country, color='blue')
             ax.set_title(f"{title_prefix}: {country}")
             ax.set_xlabel("Date")
             ax.set_ylabel("Production (mb/d)")
@@ -86,12 +97,14 @@ def export_all_countries_pdf(data_dict, title_prefix="OPEC+ Crude Oil Production
 # --- Streamlit UI ---
 st.title("OPEC & OPEC+ Crude Oil Production Dashboard")
 
-selected_countries = st.multiselect("Select countries/regions to display", options=list(SERIES_IDS.keys()), default=list(SERIES_IDS.keys()))
+selected_countries = st.multiselect("Select countries/regions to display", options=list(SERIES_IDS.values()), default=list(SERIES_IDS.values()))
 data_dict = {}
 
 for name in selected_countries:
+    # Reverse lookup the series_id
+    series_id = [k for k, v in SERIES_IDS.items() if v == name][0]
     with st.spinner(f"Fetching data for {name}..."):
-        df = fetch_series_data(SERIES_IDS[name])
+        df = fetch_series_data(series_id)
         if not df.empty:
             data_dict[name] = df
             st.plotly_chart(plotly_production_chart(df, name), use_container_width=True)
@@ -108,5 +121,3 @@ if st.button("📄 Download PDF Report"):
                 file_name="OPEC_Production_Report.pdf",
                 mime="application/pdf"
             )
-
-
