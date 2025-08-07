@@ -91,44 +91,43 @@ def generate_analysis(df):
 
 # --- Export to PDF using Matplotlib ---
 def export_all_countries_pdf(data_dict, title_prefix="OPEC & OPEC+ Crude Oil Production", filename="opec_production_report.pdf"):
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as mtick
-    from matplotlib.backends.backend_pdf import PdfPages
-    import pandas as pd
-
     countries = list(data_dict.keys())
     n_cols = 3
     n_rows = (len(countries) + n_cols - 1) // n_cols
     fig, axs = plt.subplots(n_rows, n_cols, figsize=(15, n_rows * 3), constrained_layout=True)
 
-    # Flatten axs for easier access
-    axs = axs.flatten() if n_rows > 1 else axs
-
     for idx, (country, df) in enumerate(data_dict.items()):
-        ax = axs[idx]
+        row, col = divmod(idx, n_cols)
+        ax = axs[row][col] if n_rows > 1 else axs[col]
 
-        # Ensure correct date and value order
-        df_sorted = df.sort_values('period')
-        dates = pd.to_datetime(df_sorted['period'])
-        values = df_sorted['value']
+        # 🛠️ Convert value to numeric and drop missing
+        df = df.copy()
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+        df = df.dropna(subset=['value'])
 
-        ax.plot(dates, values, label=country, color='blue')
+        dates = pd.to_datetime(df['period'])
+        values = df['value']
+
+        ax.plot(dates, values, label=country, color='blue', linewidth=1)
         ax.set_title(f"{title_prefix}: {country}", fontsize=9)
         ax.set_xlabel("Date", fontsize=7)
         ax.set_ylabel("Production (mb/d)", fontsize=7)
 
-        # Format y-axis
+        # 📉 Fix Y-axis clutter and format
         ax.yaxis.set_major_locator(plt.MaxNLocator(nbins=4, prune='both'))
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f'{x:.1f}'))
+
         ax.grid(True, linewidth=0.3)
         ax.tick_params(axis='x', labelrotation=30, labelsize=6)
         ax.tick_params(axis='y', labelsize=6)
 
-    # Hide unused subplots
-    for idx in range(len(data_dict), len(axs)):
-        axs[idx].axis("off")
+    # 🔲 Hide unused subplots
+    total_axes = n_rows * n_cols
+    for idx in range(len(countries), total_axes):
+        row, col = divmod(idx, n_cols)
+        ax = axs[row][col] if n_rows > 1 else axs[col]
+        ax.axis("off")
 
-    # Save to PDF
     with PdfPages(filename) as pdf:
         pdf.savefig(fig, bbox_inches="tight")
     plt.close(fig)
@@ -178,5 +177,6 @@ if st.button("📄 Download PDF Report"):
                 file_name="OPEC_Production_Report.pdf",
                 mime="application/pdf"
             )
+
 
 
