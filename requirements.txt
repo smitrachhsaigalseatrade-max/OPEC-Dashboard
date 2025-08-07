@@ -4,3 +4,4 @@ pandas
 requests
 reportlab
 kaleido
+matplotlib
