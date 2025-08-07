@@ -10,7 +10,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import pandas as pd
 # --- Constants ---
 API_URL = "https://api.eia.gov/v2/steo/data/"
-API_KEY = "YOUR_API_KEY"
+API_KEY = "hEu3sZUgechYgqPGXrhLG8cOpMhLvxQwC2PPLhcl"
 
 # --- Series IDs ---
 SERIES_IDS = {
@@ -108,4 +108,5 @@ if st.button("📄 Download PDF Report"):
                 file_name="OPEC_Production_Report.pdf",
                 mime="application/pdf"
             )
+
 
