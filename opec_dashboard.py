@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 
 # --- Constants ---
 API_URL = "https://api.eia.gov/v2/steo/data/"
@@ -90,7 +91,7 @@ def generate_analysis(df):
     return f"{latest_period.strftime('%b %Y')}: {latest_value:.2f} mb/d ({pct_change:+.1f}% YoY)"
 
 # --- Export to PDF using Matplotlib ---
-def export_all_countries_pdf(data_dict, title_prefix="OPEC+ Crude Oil Production", filename="opec_production_report.pdf"):
+def export_all_countries_pdf(data_dict, title_prefix="OPEC & OPEC+ Crude Oil Production", filename="opec_production_report.pdf"):
     with PdfPages(filename) as pdf:
         for country, df in data_dict.items():
             fig, ax = plt.subplots(figsize=(10, 5))
@@ -98,6 +99,8 @@ def export_all_countries_pdf(data_dict, title_prefix="OPEC+ Crude Oil Production
             ax.set_title(f"{title_prefix}: {country}")
             ax.set_xlabel("Date")
             ax.set_ylabel("Production (mb/d)")
+            ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f'{x:,.1f}'))  # Clean y-axis
+            ax.yaxis.set_major_locator(plt.MaxNLocator(nbins=5))  # Fewer y-ticks
             ax.grid(True)
             ax.legend()
             fig.tight_layout()
@@ -132,6 +135,3 @@ if st.button("📄 Download PDF Report"):
                 file_name="OPEC_Production_Report.pdf",
                 mime="application/pdf"
             )
-
-
-
