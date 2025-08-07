@@ -3,10 +3,29 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
+from io import BytesIO
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
 
 # ------------------------------
 # Define OPEC+ countries and series IDs
 # ------------------------------
+OPEC_SERIES = {
+    'Algeria': 'COPR_AG',
+    'Congo': 'COPR_CF',
+    'Equatorial Guinea': 'COPR_EK',
+    'Gabon': 'COPR_GB',
+    'Iran': 'COPR_IR',
+    'Iraq': 'COPR_IZ',
+    'Kuwait': 'COPR_KU',
+    'Libya': 'COPR_LY',
+    'Nigeria': 'COPR_NI',
+    'Saudi Arabia': 'COPR_SA',
+    'UAE': 'COPR_TC',
+    'Venezuela': 'COPR_VE'
+}
+
 OPEC_PLUS_SERIES = {
     'Azerbaijan': 'COPR_AJ',
     'Bahrain': 'COPR_BA',
@@ -20,15 +39,15 @@ OPEC_PLUS_SERIES = {
     'South Sudan': 'COPR_OD'
 }
 
-API_KEY = "hEu3sZUgechYgqPGXrhLG8cOpMhLvxQwC2PPLhcl"  # Replace with your actual EIA API key
-BASE_URL = "https://api.eia.gov/v2/steo/data/"
+ALL_SERIES = {**OPEC_SERIES, **OPEC_PLUS_SERIES}
 
+API_KEY = "hEu3sZUgechYgqPGXrhLG8cOpMhLvxQwC2PPLhcl"
+BASE_URL = "https://api.eia.gov/v2/steo/data/"
 
 # ------------------------------
 # Fetch data from EIA STEO API
 # ------------------------------
 def fetch_series_data(series_id):
-    # Automatically use current month as end date
     today = datetime.today()
     end_date = today.strftime("%Y-%m-%d")
 
@@ -58,7 +77,6 @@ def fetch_series_data(series_id):
     df["YoY"] = df["value"].pct_change(12) * 100
     return df
 
-
 # ------------------------------
 # Plot production chart
 # ------------------------------
@@ -78,7 +96,6 @@ def plot_production(df, country):
     )
     return fig
 
-
 # ------------------------------
 # Plot YoY / MoM chart
 # ------------------------------
@@ -97,17 +114,25 @@ def plot_growth(df, country, growth_type="YoY"):
     )
     return fig
 
-
 # ------------------------------
 # Streamlit Dashboard
 # ------------------------------
 st.set_page_config(layout="wide")
-st.title("📊 OPEC+ Crude Oil Production Dashboard")
+st.title("\U0001F4CA OPEC+ Crude Oil Production Dashboard")
 st.markdown("Monthly crude oil production trends and growth analysis by country (2018–2025)")
 
-tabs = st.tabs(list(OPEC_PLUS_SERIES.keys()))
+# Export PDF
+def export_analysis_pdf(analysis_text):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    elements = [Paragraph(analysis_text, styles['Normal']), Spacer(1, 12)]
+    doc.build(elements)
+    return buffer
 
-for i, (country, series_id) in enumerate(OPEC_PLUS_SERIES.items()):
+tabs = st.tabs(list(ALL_SERIES.keys()))
+
+for i, (country, series_id) in enumerate(ALL_SERIES.items()):
     with tabs[i]:
         with st.spinner(f"Loading {country} data..."):
             df = fetch_series_data(series_id)
@@ -118,5 +143,23 @@ for i, (country, series_id) in enumerate(OPEC_PLUS_SERIES.items()):
                     st.plotly_chart(plot_growth(df, country, "MoM"), use_container_width=True)
                 with col2:
                     st.plotly_chart(plot_growth(df, country, "YoY"), use_container_width=True)
+
+                latest_period = df['period'].max()
+                latest_value = df[df['period'] == latest_period]['value'].values[0]
+                mom = df[df['period'] == latest_period]['MoM'].values[0]
+                yoy = df[df['period'] == latest_period]['YoY'].values[0]
+                month_label = latest_period.strftime("%b %Y")
+
+                analysis = (
+                    f"As of {month_label}, {country} produced {latest_value:,.0f} kb/d. "
+                    f"This represents a {'rise' if yoy > 0 else 'decline'} of {abs(yoy):.1f}% YoY and "
+                    f"an {'increase' if mom > 0 else 'drop'} of {abs(mom):.1f}% MoM."
+                )
+                st.markdown(f"### Analysis\n{analysis}")
+
+                # Export as PDF
+                if st.button(f"Export {country} Report as PDF", key=country):
+                    pdf = export_analysis_pdf(analysis)
+                    st.download_button("📄 Download PDF", data=pdf, file_name=f"{country}_report.pdf", mime="application/pdf")
             else:
                 st.warning(f"No data available for {country}")
