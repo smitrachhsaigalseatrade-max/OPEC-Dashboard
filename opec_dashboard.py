@@ -5,7 +5,9 @@ import plotly.graph_objects as go
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
-
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+import pandas as pd
 # --- Constants ---
 API_URL = "https://api.eia.gov/v2/steo/data/"
 API_KEY = "YOUR_API_KEY"
@@ -66,27 +68,20 @@ def generate_analysis(df):
     return "YoY comparison unavailable."
 
 # --- Export to PDF using Matplotlib ---
-def export_all_countries_pdf(data_dict):
-    pdf_path = "OPEC_Production_Report.pdf"
-    with PdfPages(pdf_path) as pdf:
+def export_all_countries_pdf(data_dict, title_prefix="OPEC+ Crude Oil Production", filename="opec_production_report.pdf"):
+    with PdfPages(filename) as pdf:
         for country, df in data_dict.items():
-            fig, ax = plt.subplots(figsize=(10, 4))
-            df = df.sort_values("period")
-            ax.plot(df["period"], df["value"], marker='o', linewidth=2)
-            ax.set_title(f"{country} Crude Oil Production", fontsize=14)
-            ax.set_ylabel("Production (kb/d)")
-            ax.set_xlabel("Period")
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.plot(pd.to_datetime(df['date']), df['value'], label=country, color='blue')
+            ax.set_title(f"{title_prefix}: {country}")
+            ax.set_xlabel("Date")
+            ax.set_ylabel("Production (mb/d)")
             ax.grid(True)
-            ax.tick_params(axis='x', rotation=45)
+            ax.legend()
             fig.tight_layout()
-
-            # Add YoY change as subtitle
-            analysis = generate_analysis(df)
-            plt.figtext(0.5, 0.01, analysis, wrap=True, horizontalalignment='center', fontsize=10)
-
             pdf.savefig(fig)
             plt.close(fig)
-    return pdf_path
+    return filename
 
 # --- Streamlit UI ---
 st.title("OPEC & OPEC+ Crude Oil Production Dashboard")
@@ -113,3 +108,4 @@ if st.button("📄 Download PDF Report"):
                 file_name="OPEC_Production_Report.pdf",
                 mime="application/pdf"
             )
+
