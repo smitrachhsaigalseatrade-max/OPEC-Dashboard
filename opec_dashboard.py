@@ -91,20 +91,33 @@ def generate_analysis(df):
 
 # --- Export to PDF using Matplotlib ---
 def export_all_countries_pdf(data_dict, title_prefix="OPEC & OPEC+ Crude Oil Production", filename="opec_production_report.pdf"):
+    countries = list(data_dict.keys())
+    n_cols = 3
+    n_rows = (len(countries) + n_cols - 1) // n_cols
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(15, n_rows * 3), constrained_layout=True)
+
+    for idx, (country, df) in enumerate(data_dict.items()):
+        row, col = divmod(idx, n_cols)
+        ax = axs[row][col] if n_rows > 1 else axs[col]
+
+        ax.plot(pd.to_datetime(df['period']), df['value'], label=country, color='blue')
+        ax.set_title(f"{title_prefix}: {country}", fontsize=9)
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Production (mb/d)")
+        ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f'{x:,.1f}'))
+        ax.grid(True)
+        ax.tick_params(axis='x', labelrotation=30, labelsize=7)
+        ax.tick_params(axis='y', labelsize=7)
+
+    total_axes = n_rows * n_cols
+    for idx in range(len(countries), total_axes):
+        row, col = divmod(idx, n_cols)
+        ax = axs[row][col] if n_rows > 1 else axs[col]
+        ax.axis("off")
+
     with PdfPages(filename) as pdf:
-        for country, df in data_dict.items():
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(pd.to_datetime(df['period']), df['value'], label=country, color='blue')
-            ax.set_title(f"{title_prefix}: {country}")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Production (mb/d)")
-            ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f'{x:,.1f}'))
-            ax.yaxis.set_major_locator(plt.MaxNLocator(nbins=5))
-            ax.grid(True)
-            ax.legend()
-            fig.tight_layout()
-            pdf.savefig(fig)
-            plt.close(fig)
+        pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
     return filename
 
 # --- Streamlit UI ---
