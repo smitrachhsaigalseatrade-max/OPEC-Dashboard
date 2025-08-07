@@ -3,199 +3,113 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
-from io import BytesIO
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.pagesizes import A4
-import tempfile
-import plotly.io as pio
+from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib.pyplot as plt
 
-# ------------------------------
-# Define OPEC+ countries and series IDs
-# ------------------------------
-OPEC_SERIES = {
-    'Algeria': 'COPR_AG',
-    'Congo': 'COPR_CF',
-    'Equatorial Guinea': 'COPR_EK',
-    'Gabon': 'COPR_GB',
-    'Iran': 'COPR_IR',
-    'Iraq': 'COPR_IZ',
-    'Kuwait': 'COPR_KU',
-    'Libya': 'COPR_LY',
-    'Nigeria': 'COPR_NI',
-    'Saudi Arabia': 'COPR_SA',
-    'UAE': 'COPR_TC',
-    'Venezuela': 'COPR_VE'
+# --- Constants ---
+API_URL = "https://api.eia.gov/v2/steo/data/"
+API_KEY = "YOUR_API_KEY"
+
+# --- Series IDs ---
+SERIES_IDS = {
+    "OPEC": "COPR_OPEC",
+    "OPEC+": "COPR_OPECPLUS",
+    "Saudi Arabia": "COPR_SAUDI",
+    "Russia": "COPR_RUSSIA",
+    "UAE": "COPR_UAE",
+    "Iraq": "COPR_IRAQ",
+    "Iran": "COPR_IRAN",
+    "Kuwait": "COPR_KUWAIT",
+    "Venezuela": "COPR_VENEZUELA"
 }
 
-OPEC_PLUS_SERIES = {
-    'Azerbaijan': 'COPR_AJ',
-    'Bahrain': 'COPR_BA',
-    'Brunei': 'COPR_BX',
-    'Kazakhstan': 'COPR_KZ',
-    'Malaysia': 'COPR_MY',
-    'Mexico': 'COPR_MX',
-    'Oman': 'COPR_MU',
-    'Russia': 'COPR_RS',
-    'Sudan': 'COPR_SU',
-    'South Sudan': 'COPR_OD'
-}
-
-ALL_SERIES = {**OPEC_SERIES, **OPEC_PLUS_SERIES}
-
-API_KEY = "hEu3sZUgechYgqPGXrhLG8cOpMhLvxQwC2PPLhcl"
-BASE_URL = "https://api.eia.gov/v2/steo/data/"
-
-# ------------------------------
-# Fetch data from EIA STEO API
-# ------------------------------
+# --- Fetch and Process Data ---
 def fetch_series_data(series_id):
-    today = datetime.today()
-    end_date = today.strftime("%Y-%m-%d")
-
     params = {
         "api_key": API_KEY,
         "frequency": "monthly",
         "data[0]": "value",
         "facets[seriesId][]": series_id,
         "start": "2018-01",
-        "end": end_date
+        "end": datetime.today().strftime("%Y-%m")
     }
+    try:
+        response = requests.get(API_URL, params=params)
+        response.raise_for_status()
+        raw = response.json()["response"]["data"]
+        df = pd.DataFrame(raw)
+        df = df.sort_values("period")
+        df["period"] = pd.to_datetime(df["period"])
+        return df
+    except Exception as e:
+        st.error(f"Error fetching data for {series_id}: {e}")
+        return pd.DataFrame()
 
-    response = requests.get(BASE_URL, params=params)
-    if response.status_code != 200:
-        st.error(f"Failed to fetch data for {series_id}")
-        return None
-
-    data = response.json().get("response", {}).get("data", [])
-    df = pd.DataFrame(data)
-    if df.empty:
-        return None
-
-    df["period"] = pd.to_datetime(df["period"])
-    df = df[["period", "value"]].sort_values("period")
-    df["value"] = pd.to_numeric(df["value"], errors="coerce")
-    df["MoM"] = df["value"].pct_change() * 100
-    df["YoY"] = df["value"].pct_change(12) * 100
-    return df
-
-# ------------------------------
-# Plot functions
-# ------------------------------
-def plot_production(df, country):
+# --- Generate Plotly Chart ---
+def plotly_production_chart(df, country):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df["period"], y=df["value"],
-        mode='lines+markers',
-        name=country,
-        line=dict(width=2)
-    ))
-    fig.update_layout(
-        title=f"{country} Monthly Crude Oil Production (kb/d)",
-        xaxis_title="Date",
-        yaxis_title="Production (kb/d)",
-        template="plotly_dark"
-    )
+    fig.add_trace(go.Scatter(x=df['period'], y=df['value'], mode='lines+markers', name=country))
+    fig.update_layout(title=f"{country} Crude Oil Production",
+                      xaxis_title="Period", yaxis_title="Production (kb/d)", height=400)
     return fig
 
-def plot_growth(df, country, growth_type="YoY"):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=df["period"], y=df[growth_type],
-        name=growth_type,
-        marker_color="crimson" if growth_type == "YoY" else "dodgerblue"
-    ))
-    fig.update_layout(
-        title=f"{country} {growth_type} Change in Production (%)",
-        xaxis_title="Date",
-        yaxis_title="Change (%)",
-        template="plotly_dark"
-    )
-    return fig
+# --- Analysis (YoY Change) ---
+def generate_analysis(df):
+    if len(df) < 13:
+        return "Not enough data for analysis."
+    latest = df.iloc[-1]
+    year_ago = df[df["period"] == latest["period"] - pd.DateOffset(years=1)]
+    if not year_ago.empty:
+        change = latest["value"] - year_ago.iloc[0]["value"]
+        pct_change = (change / year_ago.iloc[0]["value"]) * 100
+        return f"YoY Change: {change:.0f} kb/d ({pct_change:.1f}%)"
+    return "YoY comparison unavailable."
 
-# ------------------------------
-# Export all countries to a single PDF
-# ------------------------------
-def export_all_countries_pdf():
-    styles = getSampleStyleSheet()
-    elements = []
+# --- Export to PDF using Matplotlib ---
+def export_all_countries_pdf(data_dict):
+    pdf_path = "OPEC_Production_Report.pdf"
+    with PdfPages(pdf_path) as pdf:
+        for country, df in data_dict.items():
+            fig, ax = plt.subplots(figsize=(10, 4))
+            df = df.sort_values("period")
+            ax.plot(df["period"], df["value"], marker='o', linewidth=2)
+            ax.set_title(f"{country} Crude Oil Production", fontsize=14)
+            ax.set_ylabel("Production (kb/d)")
+            ax.set_xlabel("Period")
+            ax.grid(True)
+            ax.tick_params(axis='x', rotation=45)
+            fig.tight_layout()
 
-    for country, series_id in ALL_SERIES.items():
-        df = fetch_series_data(series_id)
-        if df is None or df.empty:
-            continue
+            # Add YoY change as subtitle
+            analysis = generate_analysis(df)
+            plt.figtext(0.5, 0.01, analysis, wrap=True, horizontalalignment='center', fontsize=10)
 
-        latest_period = df['period'].max()
-        latest_value = df[df['period'] == latest_period]['value'].values[0]
-        mom = df[df['period'] == latest_period]['MoM'].values[0]
-        yoy = df[df['period'] == latest_period]['YoY'].values[0]
-        month_label = latest_period.strftime("%b %Y")
-        analysis = (
-            f"As of {month_label}, {country} produced {latest_value:,.0f} kb/d. "
-            f"This represents a {'rise' if yoy > 0 else 'decline'} of {abs(yoy):.1f}% YoY and "
-            f"an {'increase' if mom > 0 else 'drop'} of {abs(mom):.1f}% MoM."
-        )
+            pdf.savefig(fig)
+            plt.close(fig)
+    return pdf_path
 
-        elements.append(Paragraph(f"<b>{country} Production Overview</b>", styles['Heading2']))
-        elements.append(Paragraph(analysis, styles['Normal']))
-        elements.append(Spacer(1, 12))
+# --- Streamlit UI ---
+st.title("OPEC & OPEC+ Crude Oil Production Dashboard")
 
-        for fig in [plot_production(df, country), plot_growth(df, country, "MoM"), plot_growth(df, country, "YoY")]:
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
-                pio.write_image(fig, tmpfile.name, format="png", width=700, height=400)
-                elements.append(Image(tmpfile.name, width=500, height=280))
-                elements.append(Spacer(1, 12))
+selected_countries = st.multiselect("Select countries/regions to display", options=list(SERIES_IDS.keys()), default=list(SERIES_IDS.keys()))
+data_dict = {}
 
-        elements.append(PageBreak())
+for name in selected_countries:
+    with st.spinner(f"Fetching data for {name}..."):
+        df = fetch_series_data(SERIES_IDS[name])
+        if not df.empty:
+            data_dict[name] = df
+            st.plotly_chart(plotly_production_chart(df, name), use_container_width=True)
+            st.caption(generate_analysis(df))
 
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    doc.build(elements)
-    return buffer
-
-# ------------------------------
-# Streamlit App
-# ------------------------------
-st.set_page_config(layout="wide")
-st.title("\U0001F4CA OPEC+ Crude Oil Production Dashboard")
-st.markdown("Monthly crude oil production trends and growth analysis by country (2018–2025)")
-
-# Dropdown for single country view
-selected_country = st.selectbox("Select a Country", list(ALL_SERIES.keys()))
-series_id = ALL_SERIES[selected_country]
-
-with st.spinner(f"Loading {selected_country} data..."):
-    df = fetch_series_data(series_id)
-    if df is not None:
-        st.plotly_chart(plot_production(df, selected_country), use_container_width=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(plot_growth(df, selected_country, "MoM"), use_container_width=True)
-        with col2:
-            st.plotly_chart(plot_growth(df, selected_country, "YoY"), use_container_width=True)
-
-        latest_period = df['period'].max()
-        latest_value = df[df['period'] == latest_period]['value'].values[0]
-        mom = df[df['period'] == latest_period]['MoM'].values[0]
-        yoy = df[df['period'] == latest_period]['YoY'].values[0]
-        month_label = latest_period.strftime("%b %Y")
-
-        analysis = (
-            f"As of {month_label}, {selected_country} produced {latest_value:,.0f} kb/d. "
-            f"This represents a {'rise' if yoy > 0 else 'decline'} of {abs(yoy):.1f}% YoY and "
-            f"an {'increase' if mom > 0 else 'drop'} of {abs(mom):.1f}% MoM."
-        )
-        st.markdown(f"### Analysis\n{analysis}")
-
-# Export full report
-st.markdown("---")
-st.markdown("### \U0001F4C4 Export All Countries Report")
-if st.button("Generate Full OPEC+ PDF Report"):
-    with st.spinner("Creating PDF..."):
-        pdf = export_all_countries_pdf()
-        st.download_button(
-            label="\U0001F4E5 Download Full Report",
-            data=pdf,
-            file_name="OPEC_Production_Report.pdf",
-            mime="application/pdf"
-        )
+# --- PDF Export ---
+if st.button("📄 Download PDF Report"):
+    with st.spinner("Generating PDF report..."):
+        pdf_file = export_all_countries_pdf(data_dict)
+        with open(pdf_file, "rb") as f:
+            st.download_button(
+                label="📥 Download PDF",
+                data=f,
+                file_name="OPEC_Production_Report.pdf",
+                mime="application/pdf"
+            )
